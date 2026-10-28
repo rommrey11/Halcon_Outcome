@@ -9,6 +9,10 @@ class Order extends Model
 {
     use HasFactory;
 
+    protected $primaryKey = 'invoice_number'; // Define la clave primaria real
+    public $incrementing = false;              // No es un ID autoincrementable
+    protected $keyType = 'string';             // Es tipo texto
+
     protected $fillable = [
         'invoice_number',
         'customer_number',
@@ -22,10 +26,5 @@ class Order extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class, 'customer_number', 'customer_number');
-    }
-
-    public function deliveryEvidence()
-    {
-        return $this->hasOne(DeliveryEvidence::class, 'invoice_number', 'invoice_number');
     }
 }
