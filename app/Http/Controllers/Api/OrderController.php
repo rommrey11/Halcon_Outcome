@@ -68,4 +68,26 @@ class OrderController extends Controller
         $orders = Order::where('is_deleted', true)->get();
         return response()->json($orders, 200);
     }
+
+    public function track(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_number' => 'required|string',
+            'invoice_number'  => 'required|string',
+        ]);
+
+        $order = Order::with(['customer'])
+            ->where('customer_number', trim($validated['customer_number']))
+            ->where('invoice_number', trim($validated['invoice_number']))
+            ->where('is_deleted', false)
+            ->first();
+
+        if (!$order) {
+            return response()->json([
+                'message' => 'No order found matching that Customer Number and Invoice Number.'
+            ], 404);
+        }
+
+        return response()->json($order, 200);
+    }
 }

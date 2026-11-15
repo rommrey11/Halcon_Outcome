@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\OrderController;
 
 // Rutas públicas (sin middleware auth) para pruebas en Postman
+Route::get('/orders/track', [OrderController::class, 'track']);
 Route::get('orders/invoice/{invoice}', [OrderController::class, 'getByInvoice']);
 Route::get('orders/archived', [OrderController::class, 'archived']);
 
