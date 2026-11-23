@@ -1,4 +1,4 @@
 import { createApp } from 'vue';
-import OrderTracking from './components/OrderTracking.vue';
+import App from './app.vue';
 
-createApp(OrderTracking).mount('#app');
+createApp(App).mount('#app');
