@@ -1,4 +1,3 @@
-cat << 'EOF' > README.md
 # HALCON — Order Tracking & Logistics Management System
 
 **HALCON** is a full-stack web application designed to manage the complete lifecycle of customer orders across internal departments (**Sales**, **Warehouse**, **Purchasing**, and **Route**) while offering a real-time public order tracking portal with photographic delivery evidence for customers.
