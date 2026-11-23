@@ -40,7 +40,7 @@
                                 v-model="customerNumber"
                                 type="text"
                                 required
-                                placeholder="e.g. CUST-5202"
+                                placeholder="e.g. CUST-1001"
                                 class="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                             />
                         </div>
@@ -53,7 +53,7 @@
                                 v-model="invoiceNumber"
                                 type="text"
                                 required
-                                placeholder="e.g. INV-82489"
+                                placeholder="e.g. INV-2026-001"
                                 class="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                             />
                         </div>
@@ -68,7 +68,6 @@
                     </button>
                 </form>
 
-                <!-- Error Alert -->
                 <div
                     v-if="errorMessage"
                     class="mt-6 rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700"
@@ -121,7 +120,7 @@
                         <div>
                             <p class="text-slate-400 text-xs uppercase">Customer</p>
                             <p class="font-semibold text-slate-800">
-                                {{ order.customer?.name || order.customer_number }}
+                                {{ order.customer?.company_name || order.customer_number }}
                             </p>
                         </div>
 
@@ -138,6 +137,45 @@
                         <div v-if="order.notes" class="sm:col-span-2">
                             <p class="text-slate-400 text-xs uppercase">Notes</p>
                             <p class="text-slate-700">{{ order.notes }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Delivery Evidence Section (Visible when Delivered and photos exist) -->
+                    <div
+                        v-if="order.status === 'Delivered' && (order.delivery_evidence?.loaded_url || order.delivery_evidence?.unloaded_url)"
+                        class="pt-5 border-t border-slate-200 space-y-3"
+                    >
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-800">
+                            Delivery Evidence Photos
+                        </h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div
+                                v-if="order.delivery_evidence?.loaded_url"
+                                class="border border-slate-200 rounded-xl overflow-hidden bg-slate-50"
+                            >
+                                <img
+                                    :src="order.delivery_evidence.loaded_url"
+                                    alt="Loaded Unit Evidence"
+                                    class="w-full h-48 object-cover"
+                                />
+                                <p class="px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+                                    Loaded Unit Evidence
+                                </p>
+                            </div>
+
+                            <div
+                                v-if="order.delivery_evidence?.unloaded_url"
+                                class="border border-slate-200 rounded-xl overflow-hidden bg-slate-50"
+                            >
+                                <img
+                                    :src="order.delivery_evidence.unloaded_url"
+                                    alt="Unloaded / Delivered Evidence"
+                                    class="w-full h-48 object-cover"
+                                />
+                                <p class="px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+                                    Unloaded / Delivered Evidence
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>

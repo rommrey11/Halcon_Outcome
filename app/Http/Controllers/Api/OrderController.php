@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Models\DeliveryEvidence;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -21,7 +22,8 @@ class OrderController extends Controller
         return ($user && $user->is_active) ? $user : null;
     }
 
-    // Búsqueda pública para clientes (Phase 1)
+    // Búsqueda pública para clientes (incluye evidencias si está Delivered)
+// Búsqueda pública para clientes (incluye evidencias si está Delivered)
     public function track(Request $request)
     {
         $validated = $request->validate([
@@ -29,7 +31,7 @@ class OrderController extends Controller
             'invoice_number'  => 'required|string',
         ]);
 
-        $order = Order::with(['customer'])
+        $order = Order::with(['customer', 'deliveryEvidence'])
             ->where('customer_number', trim($validated['customer_number']))
             ->where('invoice_number', trim($validated['invoice_number']))
             ->where('is_deleted', false)
@@ -44,7 +46,6 @@ class OrderController extends Controller
         return response()->json($order, 200);
     }
 
-    // Generar siguiente número de factura consecutivo
     public function nextInvoice()
     {
         $count = Order::count() + 1;
@@ -57,10 +58,9 @@ class OrderController extends Controller
         return response()->json(['next_invoice' => $candidate], 200);
     }
 
-    // Listar órdenes activas con filtros
     public function index(Request $request)
     {
-        $query = Order::with('customer')->where('is_deleted', false);
+        $query = Order::with(['customer', 'deliveryEvidences'])->where('is_deleted', false);
 
         if ($request->filled('invoice_number')) {
             $query->where('invoice_number', 'like', '%' . trim($request->invoice_number) . '%');
@@ -78,7 +78,6 @@ class OrderController extends Controller
         return response()->json($query->orderByDesc('created_at')->get(), 200);
     }
 
-    // Crear nueva orden (inicia obligatoriamente en "Ordered")
     public function store(Request $request)
     {
         $actor = $this->getActor($request);
@@ -121,17 +120,15 @@ class OrderController extends Controller
             ]);
         });
 
-        return response()->json($order->load('customer'), 201);
+        return response()->json($order->load(['customer', 'deliveryEvidences']), 201);
     }
 
-    // Ver detalle de una orden
     public function show($id)
     {
-        $order = Order::with('customer')->findOrFail($id);
+        $order = Order::with(['customer', 'deliveryEvidences'])->findOrFail($id);
         return response()->json($order, 200);
     }
 
-    // Editar orden (activa o eliminada)
     public function update(Request $request, $id)
     {
         $actor = $this->getActor($request);
@@ -139,7 +136,8 @@ class OrderController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $order = Order::with('customer')->findOrFail($id);
+        $role = $actor->role?->name;
+        $order = Order::with(['customer', 'deliveryEvidences'])->findOrFail($id);
 
         $validated = $request->validate([
             'order_date'       => 'sometimes|required|date',
@@ -149,6 +147,31 @@ class OrderController extends Controller
             'company_name'     => 'sometimes|required|string|max:255',
             'fiscal_data'      => 'sometimes|required|string',
         ]);
+
+        // Validación de transición de ciclo de vida y permisos por rol
+        if (isset($validated['status']) && $validated['status'] !== $order->status) {
+            $newStatus = $validated['status'];
+
+            if ($role !== 'Administrator') {
+                $allowedTransitions = [
+                    'Warehouse' => [
+                        'Ordered'    => 'In process',
+                        'In process' => 'In route',
+                    ],
+                    'Route' => [
+                        'In route'   => 'Delivered',
+                    ],
+                ];
+
+                $expectedNext = $allowedTransitions[$role][$order->status] ?? null;
+
+                if ($expectedNext !== $newStatus) {
+                    return response()->json([
+                        'message' => "Invalid status transition for role {$role}: cannot move order from '{$order->status}' to '{$newStatus}'."
+                    ], 422);
+                }
+            }
+        }
 
         DB::transaction(function () use ($order, $validated) {
             $orderFields = array_intersect_key(
@@ -172,10 +195,42 @@ class OrderController extends Controller
             }
         });
 
-        return response()->json($order->fresh('customer'), 200);
+        return response()->json($order->fresh(['customer', 'deliveryEvidences']), 200);
     }
 
-    // Borrado lógico (Logical Deletion)
+    // Subir foto de evidencia de entrega (Route / Administrator)
+// Subir foto de evidencia de entrega (Route / Administrator)
+    public function uploadEvidence(Request $request, $id)
+    {
+        $actor = $this->getActor($request);
+        $role = $actor?->role?->name;
+
+        if (!in_array($role, ['Administrator', 'Route'])) {
+            return response()->json([
+                'message' => 'Unauthorized: Only Route or Administrator can upload delivery evidence.'
+            ], 403);
+        }
+
+        $order = Order::findOrFail($id);
+
+        $validated = $request->validate([
+            'photo'      => 'required|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'photo_type' => 'nullable|in:loaded,delivered',
+        ]);
+
+        $path = $request->file('photo')->store('evidences', 'public');
+        $column = ($validated['photo_type'] ?? 'delivered') === 'loaded'
+            ? 'loaded_photo_path'
+            : 'unloaded_photo_path';
+
+        $evidence = DeliveryEvidence::updateOrCreate(
+            ['invoice_number' => $order->invoice_number],
+            [$column => $path]
+        );
+
+        return response()->json($evidence, 201);
+    }
+
     public function destroy(Request $request, $id)
     {
         $actor = $this->getActor($request);
@@ -193,10 +248,9 @@ class OrderController extends Controller
         return response()->json(['message' => 'Order logically deleted successfully.'], 200);
     }
 
-    // Listar órdenes eliminadas (Deleted Orders)
     public function archived(Request $request)
     {
-        $query = Order::with('customer')->where('is_deleted', true);
+        $query = Order::with(['customer', 'deliveryEvidences'])->where('is_deleted', true);
 
         if ($request->filled('invoice_number')) {
             $query->where('invoice_number', 'like', '%' . trim($request->invoice_number) . '%');
@@ -208,7 +262,6 @@ class OrderController extends Controller
         return response()->json($query->orderByDesc('updated_at')->get(), 200);
     }
 
-    // Restaurar orden eliminada
     public function restore(Request $request, $id)
     {
         $actor = $this->getActor($request);
@@ -223,6 +276,6 @@ class OrderController extends Controller
         $order = Order::findOrFail($id);
         $order->update(['is_deleted' => false]);
 
-        return response()->json($order->load('customer'), 200);
+        return response()->json($order->load(['customer', 'deliveryEvidences']), 200);
     }
 }

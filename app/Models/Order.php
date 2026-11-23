@@ -2,13 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Order extends Model
 {
-    use HasFactory;
-
     protected $primaryKey = 'invoice_number';
     public $incrementing = false;
     protected $keyType = 'string';
@@ -22,6 +19,14 @@ class Order extends Model
         'notes',
         'is_deleted',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'order_date' => 'datetime',
+            'is_deleted' => 'boolean',
+        ];
+    }
 
     public function customer()
     {

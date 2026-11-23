@@ -118,7 +118,7 @@
                         :class="activeTab === 'orders' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
                         class="px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer"
                     >
-                        Order Management
+                        Orders &amp; Lifecycle
                     </button>
 
                     <button
@@ -165,13 +165,13 @@
                 </div>
             </div>
 
-            <!-- 2. ORDER MANAGEMENT TAB (ACTIVE ORDERS) -->
+            <!-- 2. ORDER MANAGEMENT & LIFECYCLE TAB -->
             <div v-if="activeTab === 'orders'" class="space-y-6">
-                <!-- Create Order Form (Sales & Admin) -->
+                <!-- Create Order Form (Sales & Admin ONLY) -->
                 <div v-if="canManageOrders" class="bg-white rounded-2xl border border-slate-200 p-6">
                     <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
                         <div>
-                            <h2 class="text-lg font-bold text-slate-900">Create New Order</h2>
+                            <h2 class="text-lg font-bold text-slate-900">Create New Order (Sales)</h2>
                             <p class="text-xs text-slate-500">All newly created orders start automatically with status <span class="font-bold text-blue-700">Ordered</span>.</p>
                         </div>
                         <button
@@ -284,6 +284,14 @@
                     </form>
                 </div>
 
+                <!-- Lifecycle Feedback Banner -->
+                <div v-if="lifecycleFeedback" class="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-xs font-semibold text-emerald-800">
+                    {{ lifecycleFeedback }}
+                </div>
+                <div v-if="lifecycleError" class="rounded-xl bg-red-50 border border-red-200 p-4 text-xs font-semibold text-red-700">
+                    {{ lifecycleError }}
+                </div>
+
                 <!-- Search & Filter Bar -->
                 <div class="bg-white rounded-2xl border border-slate-200 p-6">
                     <h2 class="text-base font-bold text-slate-900 mb-3">Search &amp; Filter Active Orders</h2>
@@ -340,10 +348,13 @@
                     </div>
                 </div>
 
-                <!-- Active Orders Table -->
+                <!-- Active Orders Table with Role-Based Lifecycle Actions -->
                 <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                     <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                        <h2 class="text-lg font-bold text-slate-900">Active Orders</h2>
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-900">Active Orders &amp; Department Workflow</h2>
+                            <p class="text-xs text-slate-500">Lifecycle: Ordered &rarr; In process &rarr; In route &rarr; Delivered</p>
+                        </div>
                         <span class="text-xs text-slate-500">{{ activeOrders.length }} active orders</span>
                     </div>
 
@@ -353,9 +364,9 @@
                                 <tr>
                                     <th class="px-6 py-3">Invoice #</th>
                                     <th class="px-6 py-3">Customer</th>
-                                    <th class="px-6 py-3">Order Date</th>
                                     <th class="px-6 py-3">Status</th>
-                                    <th class="px-6 py-3 text-right">Actions</th>
+                                    <th class="px-6 py-3">Notes / Material Alert</th>
+                                    <th class="px-6 py-3 text-right">Department Actions</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
@@ -370,23 +381,71 @@
                                         <p class="font-semibold text-slate-800">{{ ord.customer?.company_name || 'N/A' }}</p>
                                         <p class="text-xs text-slate-500">{{ ord.customer_number }}</p>
                                     </td>
-                                    <td class="px-6 py-3 text-slate-600 text-xs">{{ formatDate(ord.order_date) }}</td>
                                     <td class="px-6 py-3">
                                         <span :class="statusBadgeClass(ord.status)" class="px-2.5 py-1 rounded-full text-xs font-bold">
                                             {{ ord.status }}
                                         </span>
                                     </td>
-                                    <td class="px-6 py-3 text-right space-x-2">
+                                    <td class="px-6 py-3 text-xs text-slate-600 max-w-xs">
+                                        {{ ord.notes || '—' }}
+                                    </td>
+                                    <td class="px-6 py-3 text-right space-x-2 whitespace-nowrap">
+                                        <!-- WAREHOUSE ACTIONS -->
+                                        <button
+                                            v-if="(isWarehouse || isAdmin) && ord.status === 'Ordered'"
+                                            @click="advanceStatus(ord, 'In process')"
+                                            class="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold cursor-pointer"
+                                        >
+                                            Process Order (In process)
+                                        </button>
+
+                                        <button
+                                            v-if="(isWarehouse || isAdmin) && ord.status === 'In process'"
+                                            @click="advanceStatus(ord, 'In route')"
+                                            class="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold cursor-pointer"
+                                        >
+                                            Ready for Route (In route)
+                                        </button>
+
+                                        <button
+                                            v-if="(isWarehouse || isAdmin) && ord.status === 'In process'"
+                                            @click="requestPurchasingSupport(ord)"
+                                            class="px-3 py-1.5 rounded bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-semibold cursor-pointer"
+                                        >
+                                            Missing Material
+                                        </button>
+
+                                        <!-- PURCHASING ACTION -->
+                                        <button
+                                            v-if="(isPurchasing || isAdmin) && ord.status === 'In process'"
+                                            @click="confirmMaterialSupplied(ord)"
+                                            class="px-3 py-1.5 rounded bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold cursor-pointer"
+                                        >
+                                            Material Restocked
+                                        </button>
+
+                                        <!-- ROUTE ACTION -->
+                                        <button
+                                            v-if="(isRoute || isAdmin) && ord.status === 'In route'"
+                                            @click="openOrderModal(ord)"
+                                            class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+                                        >
+                                            Upload Evidence &amp; Deliver
+                                        </button>
+
+                                        <!-- DETAILS / EDIT -->
                                         <button
                                             @click="openOrderModal(ord)"
-                                            class="px-3 py-1 rounded bg-slate-900 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
+                                            class="px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
                                         >
-                                            Details / Edit
+                                            Details
                                         </button>
+
+                                        <!-- LOGICAL DELETE (Sales / Admin) -->
                                         <button
                                             v-if="canManageOrders"
                                             @click="logicalDeleteOrder(ord)"
-                                            class="px-3 py-1 rounded bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold cursor-pointer"
+                                            class="px-3 py-1.5 rounded bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold cursor-pointer"
                                         >
                                             Delete
                                         </button>
@@ -626,7 +685,7 @@
             </div>
         </main>
 
-        <!-- ORDER DETAILS & EDIT MODAL -->
+        <!-- ORDER DETAILS, LIFECYCLE & EVIDENCE MODAL -->
         <div
             v-if="selectedOrder"
             class="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-4 z-50"
@@ -634,7 +693,7 @@
             <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto">
                 <div class="flex items-center justify-between border-b border-slate-200 pb-3">
                     <div>
-                        <p class="text-xs uppercase tracking-wider text-slate-400">Order Details &amp; Editing</p>
+                        <p class="text-xs uppercase tracking-wider text-slate-400">Order Details &amp; Lifecycle</p>
                         <h3 class="text-xl font-bold text-slate-900 font-mono">{{ selectedOrder.invoice_number }}</h3>
                     </div>
                     <button
@@ -681,12 +740,16 @@
                         <label class="block text-xs font-semibold text-slate-500 mb-1">Order Status</label>
                         <select
                             v-model="editOrderForm.status"
-                            class="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white font-semibold"
+                            :disabled="availableStatusesForRole(selectedOrder.status).length <= 1"
+                            class="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white font-semibold disabled:bg-slate-100"
                         >
-                            <option value="Ordered">Ordered</option>
-                            <option value="In process">In process</option>
-                            <option value="In route">In route</option>
-                            <option value="Delivered">Delivered</option>
+                            <option
+                                v-for="st in availableStatusesForRole(selectedOrder.status)"
+                                :key="st"
+                                :value="st"
+                            >
+                                {{ st }}
+                            </option>
                         </select>
                     </div>
 
@@ -710,9 +773,73 @@
                         ></textarea>
                     </div>
 
+                    <!-- Route Delivery Evidence Upload -->
+                    <div
+                        v-if="(isRoute || isAdmin) && ['In route', 'Delivered'].includes(selectedOrder.status)"
+                        class="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3"
+                    >
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700">
+                            Route Delivery Evidence Photos
+                        </h4>
+
+                        <div class="flex flex-wrap items-center gap-3">
+                            <select
+                                v-model="evidenceType"
+                                class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs bg-white"
+                            >
+                                <option value="loaded">Loaded Unit Photo</option>
+                                <option value="delivered">Delivered / Unloaded Photo</option>
+                            </select>
+
+                            <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                @change="handleFileSelect"
+                                class="text-xs text-slate-600"
+                            />
+
+                            <button
+                                type="button"
+                                @click="uploadEvidencePhoto"
+                                :disabled="!selectedFile || uploadingPhoto"
+                                class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-700 disabled:bg-slate-400 text-white text-xs font-semibold cursor-pointer"
+                            >
+                                {{ uploadingPhoto ? 'Uploading...' : 'Upload Photo' }}
+                            </button>
+                        </div>
+
+                        <p v-if="evidenceFeedback" class="text-xs font-semibold text-emerald-700">{{ evidenceFeedback }}</p>
+                        <p v-if="evidenceError" class="text-xs font-semibold text-red-600">{{ evidenceError }}</p>
+
+                        <!-- Uploaded Thumbnails -->
+                        <div
+                            v-if="selectedOrder.delivery_evidence?.loaded_url || selectedOrder.delivery_evidence?.unloaded_url"
+                            class="grid grid-cols-2 gap-3 pt-2"
+                        >
+                            <div
+                                v-if="selectedOrder.delivery_evidence?.loaded_url"
+                                class="border border-slate-200 rounded-lg overflow-hidden bg-white"
+                            >
+                                <img :src="selectedOrder.delivery_evidence.loaded_url" class="w-full h-28 object-cover" />
+                                <p class="px-2 py-1 text-[11px] font-semibold uppercase text-slate-500">Loaded Unit</p>
+                            </div>
+
+                            <div
+                                v-if="selectedOrder.delivery_evidence?.unloaded_url"
+                                class="border border-slate-200 rounded-lg overflow-hidden bg-white"
+                            >
+                                <img :src="selectedOrder.delivery_evidence.unloaded_url" class="w-full h-28 object-cover" />
+                                <p class="px-2 py-1 text-[11px] font-semibold uppercase text-slate-500">Delivered / Unloaded</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="sm:col-span-2 flex items-center justify-between pt-2 border-t border-slate-100">
-                        <span v-if="modalFeedback" class="text-xs font-semibold text-emerald-700">{{ modalFeedback }}</span>
-                        <span v-else class="text-xs text-slate-400">Changes reflect immediately in public tracking.</span>
+                        <div>
+                            <span v-if="modalFeedback" class="text-xs font-semibold text-emerald-700">{{ modalFeedback }}</span>
+                            <span v-else-if="modalError" class="text-xs font-semibold text-red-600">{{ modalError }}</span>
+                            <span v-else class="text-xs text-slate-400">Changes reflect immediately in public tracking.</span>
+                        </div>
 
                         <div class="space-x-2">
                             <button
@@ -764,11 +891,13 @@ const userForm = ref({
     role_id: '',
 });
 
-// Orders state
+// Orders & Lifecycle state
 const activeOrders = ref([]);
 const deletedOrders = ref([]);
 const orderFeedback = ref('');
 const orderError = ref('');
+const lifecycleFeedback = ref('');
+const lifecycleError = ref('');
 
 const nowLocalInput = () => {
     const now = new Date();
@@ -800,6 +929,7 @@ const deletedFilters = ref({
 
 const selectedOrder = ref(null);
 const modalFeedback = ref('');
+const modalError = ref('');
 const editOrderForm = ref({
     company_name: '',
     fiscal_data: '',
@@ -808,29 +938,53 @@ const editOrderForm = ref({
     notes: '',
 });
 
-const isAdmin = computed(() => currentUser.value?.role?.name === 'Administrator');
-const canManageOrders = computed(() =>
-    ['Administrator', 'Sales'].includes(currentUser.value?.role?.name)
-);
+// Evidence upload state
+const evidenceType = ref('delivered');
+const selectedFile = ref(null);
+const uploadingPhoto = ref(false);
+const evidenceFeedback = ref('');
+const evidenceError = ref('');
 
-const roleDescription = (roleName) => {
+const roleName = computed(() => currentUser.value?.role?.name || '');
+const isAdmin = computed(() => roleName.value === 'Administrator');
+const isSales = computed(() => roleName.value === 'Sales');
+const isWarehouse = computed(() => roleName.value === 'Warehouse');
+const isPurchasing = computed(() => roleName.value === 'Purchasing');
+const isRoute = computed(() => roleName.value === 'Route');
+const canManageOrders = computed(() => ['Administrator', 'Sales'].includes(roleName.value));
+
+const availableStatusesForRole = (currentStatus) => {
+    if (isAdmin.value) {
+        return ['Ordered', 'In process', 'In route', 'Delivered'];
+    }
+    if (isWarehouse.value) {
+        if (currentStatus === 'Ordered') return ['Ordered', 'In process'];
+        if (currentStatus === 'In process') return ['In process', 'In route'];
+    }
+    if (isRoute.value) {
+        if (currentStatus === 'In route') return ['In route', 'Delivered'];
+    }
+    return [currentStatus];
+};
+
+const roleDescription = (role) => {
     const descriptions = {
-        Administrator: 'Full access to users, roles, and order administration.',
-        Sales: 'Create, edit, logically delete, and restore customer orders.',
-        Purchasing: 'Support orders that require purchasing missing materials.',
-        Warehouse: 'Process and prepare customer orders.',
-        Route: 'Manage routed orders and complete deliveries.',
+        Administrator: 'Full access to users, roles, and complete order lifecycle.',
+        Sales: 'Create new orders in Ordered status, manage active orders, and restore deleted orders.',
+        Purchasing: 'Support Warehouse orders requiring missing material restock.',
+        Warehouse: 'Process Ordered shipments to In process and dispatch to In route.',
+        Route: 'Upload delivery evidence and mark In route orders as Delivered.',
     };
-    return descriptions[roleName] || 'Standard employee access.';
+    return descriptions[role] || 'Standard employee access.';
 };
 
 const availableModules = computed(() => {
-    const role = currentUser.value?.role?.name;
+    const role = roleName.value;
     const modules = [
         {
-            badge: 'Operations',
-            title: 'Order Management (Active Orders)',
-            description: 'Create new orders in Ordered status, search/filter active orders, view details, and edit.',
+            badge: 'Order Lifecycle',
+            title: 'Orders & Department Workflow',
+            description: 'Interact with active orders according to your departmental permissions (Ordered -> In process -> In route -> Delivered).',
             action: () => openOrdersModule(),
         },
     ];
@@ -910,6 +1064,8 @@ const logout = () => {
 // ORDER METHODS
 const openOrdersModule = async () => {
     activeTab.value = 'orders';
+    lifecycleFeedback.value = '';
+    lifecycleError.value = '';
     await Promise.all([fetchActiveOrders(), fetchNextInvoice()]);
 };
 
@@ -969,9 +1125,65 @@ const createOrder = async () => {
     await Promise.all([fetchActiveOrders(), fetchNextInvoice()]);
 };
 
+// QUICK LIFECYCLE TRANSITIONS
+const advanceStatus = async (ord, nextStatus) => {
+    lifecycleFeedback.value = '';
+    lifecycleError.value = '';
+
+    const res = await fetch(`/api/orders/${ord.invoice_number}`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({ status: nextStatus }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        lifecycleError.value = data.message || 'Unable to update order status.';
+        return;
+    }
+
+    lifecycleFeedback.value = `Order ${ord.invoice_number} updated to "${nextStatus}".`;
+    await fetchActiveOrders();
+};
+
+const requestPurchasingSupport = async (ord) => {
+    const res = await fetch(`/api/orders/${ord.invoice_number}`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            notes: `[PURCHASING NEEDED] Missing materials reported by Warehouse. ${ord.notes || ''}`,
+        }),
+    });
+    if (res.ok) {
+        lifecycleFeedback.value = `Purchasing support requested for order ${ord.invoice_number}.`;
+        await fetchActiveOrders();
+    }
+};
+
+const confirmMaterialSupplied = async (ord) => {
+    const cleanNotes = (ord.notes || '').replace('[PURCHASING NEEDED] Missing materials reported by Warehouse.', '').trim();
+    const res = await fetch(`/api/orders/${ord.invoice_number}`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            notes: `[MATERIALS SUPPLIED BY PURCHASING] ${cleanNotes}`,
+        }),
+    });
+    if (res.ok) {
+        lifecycleFeedback.value = `Materials confirmed for order ${ord.invoice_number}. Ready for Warehouse.`;
+        await fetchActiveOrders();
+    }
+};
+
 const openOrderModal = (ord) => {
     selectedOrder.value = ord;
     modalFeedback.value = '';
+    modalError.value = '';
+    evidenceFeedback.value = '';
+    evidenceError.value = '';
+    selectedFile.value = null;
+
     editOrderForm.value = {
         company_name: ord.customer?.company_name || '',
         fiscal_data: ord.customer?.fiscal_data || '',
@@ -983,18 +1195,69 @@ const openOrderModal = (ord) => {
 
 const updateSelectedOrder = async () => {
     modalFeedback.value = '';
+    modalError.value = '';
+
     const res = await fetch(`/api/orders/${selectedOrder.value.invoice_number}`, {
         method: 'PUT',
         headers: authHeaders(),
         body: JSON.stringify(editOrderForm.value),
     });
 
-    if (res.ok) {
-        modalFeedback.value = 'Order updated successfully!';
-        await Promise.all([fetchActiveOrders(), fetchDeletedOrders()]);
-        setTimeout(() => {
-            selectedOrder.value = null;
-        }, 600);
+    const data = await res.json();
+
+    if (!res.ok) {
+        modalError.value = data.message || 'Error updating order.';
+        return;
+    }
+
+    modalFeedback.value = 'Order updated successfully!';
+    selectedOrder.value = data;
+    await Promise.all([fetchActiveOrders(), fetchDeletedOrders()]);
+    setTimeout(() => {
+        selectedOrder.value = null;
+    }, 700);
+};
+
+// EVIDENCE UPLOAD
+const handleFileSelect = (event) => {
+    selectedFile.value = event.target.files[0] || null;
+};
+
+const uploadEvidencePhoto = async () => {
+    if (!selectedFile.value) return;
+    uploadingPhoto.value = true;
+    evidenceFeedback.value = '';
+    evidenceError.value = '';
+
+    try {
+        const formData = new FormData();
+        formData.append('photo', selectedFile.value);
+        formData.append('photo_type', evidenceType.value);
+
+        const res = await fetch(`/api/orders/${selectedOrder.value.invoice_number}/evidence`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-User-Id': currentUser.value?.id,
+            },
+            body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            evidenceError.value = data.message || 'Error uploading photo.';
+            return;
+        }
+
+        evidenceFeedback.value = 'Delivery photo uploaded! Now you can set status to "Delivered" and Save.';
+        selectedOrder.value.delivery_evidence = data;
+        selectedFile.value = null;
+        await fetchActiveOrders();
+    } catch (e) {
+        evidenceError.value = 'Network error uploading photo.';
+    } finally {
+        uploadingPhoto.value = false;
     }
 };
 
@@ -1111,10 +1374,5 @@ const statusBadgeClass = (status) => {
         Delivered: 'bg-emerald-100 text-emerald-800',
     };
     return classes[status] || 'bg-slate-200 text-slate-800';
-};
-
-const formatDate = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleString();
 };
 </script>

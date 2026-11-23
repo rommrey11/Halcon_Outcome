@@ -13,6 +13,7 @@ Route::get('/orders/track', [OrderController::class, 'track']);
 Route::get('/orders/next-invoice', [OrderController::class, 'nextInvoice']);
 Route::get('/orders/archived', [OrderController::class, 'archived']);
 Route::patch('/orders/{id}/restore', [OrderController::class, 'restore']);
+Route::post('/orders/{id}/evidence', [OrderController::class, 'uploadEvidence']);
 
 Route::apiResource('users', UserController::class);
 Route::apiResource('orders', OrderController::class);
