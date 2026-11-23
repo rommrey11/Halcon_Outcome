@@ -10,8 +10,9 @@ Route::get('/roles', [UserController::class, 'roles']);
 Route::patch('/users/{id}/toggle-status', [UserController::class, 'toggleStatus']);
 
 Route::get('/orders/track', [OrderController::class, 'track']);
-Route::get('/orders/invoice/{invoice}', [OrderController::class, 'getByInvoice']);
+Route::get('/orders/next-invoice', [OrderController::class, 'nextInvoice']);
 Route::get('/orders/archived', [OrderController::class, 'archived']);
+Route::patch('/orders/{id}/restore', [OrderController::class, 'restore']);
 
 Route::apiResource('users', UserController::class);
 Route::apiResource('orders', OrderController::class);
